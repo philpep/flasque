@@ -1,0 +1,9 @@
+*.pyc
+*.egg
+*.egg-info
+AUTHORS
+ChangeLog
+.tox
+.local
+*.swp
+.coverage

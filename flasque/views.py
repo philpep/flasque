@@ -1,7 +1,8 @@
 # -*- coding: utf8 -*-
 
 import json
-from flask.views import MethodView, Response, request, jsonify
+from flask import request, Response, jsonify
+from flask.views import MethodView
 from .queue import Queue
 
 

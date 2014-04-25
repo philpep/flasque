@@ -1,6 +1,8 @@
 # -*- coding: utf8 -*-
 
-from flasque import db
+import uuid
+from .app import db
+
 
 class Queue(object):
 
@@ -12,7 +14,7 @@ class Queue(object):
     def put(self, data):
         msgid = uuid.uuid4().hex
         db.set(self.mkey + msgid, data)
-        db.lpush(self.qkey, msgid)
+        db.rpush(self.qkey, msgid)
         return msgid
 
     def get(self, timeout=1):
