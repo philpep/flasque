@@ -4,8 +4,7 @@ import argparse
 
 
 def get_app():
-    from .urls import *
-    from .app import app
+    from .urls import app
     return app
 
 
