@@ -3,8 +3,6 @@
 from __future__ import print_function
 
 import json
-import uuid
-import random
 import Queue
 import requests
 import threading
@@ -17,6 +15,7 @@ class ThreadQueue(threading.Thread):
         self.url = api + "/queue/" + qname
         self.q = Queue.Queue()
         self.daemon = True
+        self._stop = threading.Event()
 
     def run(self):
         raise NotImplementedError
@@ -33,13 +32,26 @@ class ThreadQueue(threading.Thread):
     def task_done(self):
         return self.q.task_done()
 
+    def stop(self):
+        self._stop.set()
+
+    def close(self):
+        self._stop()
+        self.join()
+
 
 class Producer(ThreadQueue):
 
     def run(self):
         while True:
-            data = self.q.get()
-            requests.post(self.url, data=data)
+            try:
+                data = self.get(timeout=1)
+            except Queue.Empty:
+                pass
+            else:
+                requests.post(self.url, data=data)
+            if self._stop.is_set():
+                return
 
 
 class Consumer(ThreadQueue):
@@ -47,28 +59,43 @@ class Consumer(ThreadQueue):
     def run(self):
         while True:
             res = requests.get(self.url, stream=True)
-            for line in res.iter_lines():
-                continue
+            for line in res.iter_lines(chunk_size=1):
+                if self._stop.is_set():
+                    return
             res = json.loads(line)
             self.q.put(res["data"])
             self.q.join()
             requests.delete(self.url + "?msgid=" + res["msgid"])
 
 
-def main(api, queue_in, queue_out):
-    consumer = Consumer(api, queue_in)
-    producer = Producer(api, queue_out)
-    producer.start()
-    consumer.start()
-    while True:
-        try:
-            data = consumer.get_nowait()
-        except Queue.Empty:
-            pass
-        else:
-            print("recv", data)
-            consumer.task_done()
-        if random.randint(0, 100000) == 1:
-            data = uuid.uuid4().hex
-            print("send", data)
-            producer.put(data)
+class Connection(object):
+
+    def __init__(self, api_url="http://localhost:5000"):
+        self.api_url = api_url
+        self.threads = []
+        super(Connection, self).__init__()
+
+    def Producer(self, qname):
+        producer = Producer(self.api_url, qname)
+        producer.start()
+        self.threads.append(producer)
+        return producer
+
+    def Consumer(self, qname):
+        consumer = Consumer(self.api_url, qname)
+        consumer.start()
+        self.threads.append(consumer)
+        return consumer
+
+    def close(self):
+        for th in self.threads:
+            th.stop()
+        for th in self.threads:
+            th.join()
+        self.threads = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
