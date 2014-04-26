@@ -2,6 +2,10 @@
 flasque - HTTP queues
 =====================
 
+
+.. image:: https://travis-ci.org/philpep/flasque.svg?branch=master   :target: https://travis-ci.org/philpep/flasque
+
+
 `flasque` is a `flask`_ application exposing `redis`_ based queues and a
 client API using `requests`_.
 
