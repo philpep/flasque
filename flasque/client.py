@@ -7,6 +7,10 @@ import requests
 import threading
 
 
+class StopThreadException(Exception):
+    pass
+
+
 class ThreadQueue(threading.Thread):
 
     def __init__(self, api, qname, *args, **kwargs):
@@ -19,15 +23,26 @@ class ThreadQueue(threading.Thread):
 
     def run(self):
         while True:
-            self.loop()
-
-    @staticmethod
-    def make_request(func, *args, **kwargs):
-        while True:
             try:
-                return func(*args, **kwargs)
+                self.loop()
+            except StopThreadException:
+                break
+            except requests.exceptions.RequestException:
+                continue
+
+    def make_request(self, func, *args, **kwargs):
+        while True:
+            if self._stop.is_set():
+                raise StopThreadException
+            try:
+                res = func(*args, **kwargs)
             except requests.exceptions.RequestException:
                 time.sleep(1)
+            else:
+                if res.status_code == 200:
+                    return res
+                else:
+                    time.sleep(1)
 
     def get(self, *args, **kwargs):
         return self.q.get(*args, **kwargs)
@@ -75,13 +90,13 @@ class Consumer(ThreadQueue):
         for line in res.iter_lines(chunk_size=1):
             if self._stop.is_set():
                 return
-        res = json.loads(line)
-        self.q.put(res["data"])
+        msg = json.loads(line)
+        self.q.put(msg["data"])
         self.q.join()
         self.make_request(
             requests.delete,
-            self.api + "/queue/" + res["q"],
-            params={"msgid": res["msgid"]},
+            self.api + "/queue/" + msg["q"],
+            params={"msgid": msg["msgid"]},
         )
 
 
