@@ -22,9 +22,6 @@ class ThreadQueue(threading.Thread):
     def get(self, *args, **kwargs):
         return self.q.get(*args, **kwargs)
 
-    def get_nowait(self, *args, **kwargs):
-        return self.q.get_nowait(*args, **kwargs)
-
     def put(self, *args, **kwargs):
         return self.q.put(*args, **kwargs)
 
