@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 
 import json
+import time
 import Queue
 import requests
 import threading
@@ -17,7 +18,16 @@ class ThreadQueue(threading.Thread):
         self._stop = threading.Event()
 
     def run(self):
-        raise NotImplementedError
+        while True:
+            self.loop()
+
+    @staticmethod
+    def make_request(func, *args, **kwargs):
+        while True:
+            try:
+                return func(*args, **kwargs)
+            except requests.exceptions.RequestException:
+                time.sleep(1)
 
     def get(self, *args, **kwargs):
         return self.q.get(*args, **kwargs)
@@ -38,37 +48,41 @@ class ThreadQueue(threading.Thread):
 
 class Producer(ThreadQueue):
 
-    def run(self):
-        while True:
-            try:
-                data = self.get(timeout=1)
-            except Queue.Empty:
-                pass
-            else:
-                requests.post(self.api + "/queue/" + self.qname, data=data)
-            if self._stop.is_set():
-                return
+    def loop(self):
+        try:
+            data = self.get(timeout=1)
+        except Queue.Empty:
+            pass
+        else:
+            self.make_request(
+                requests.post,
+                self.api + "/queue/" + self.qname,
+                data=data,
+            )
+        if self._stop.is_set():
+            return
 
 
 class Consumer(ThreadQueue):
 
-    def run(self):
-        while True:
-            res = requests.get(
-                self.api + "/queue/",
-                params={"q": self.qname},
-                stream=True,
-            )
-            for line in res.iter_lines(chunk_size=1):
-                if self._stop.is_set():
-                    return
-            res = json.loads(line)
-            self.q.put(res["data"])
-            self.q.join()
-            requests.delete(
-                self.api + "/queue/" + res["q"],
-                params={"msgid": res["msgid"]},
-            )
+    def loop(self):
+        res = self.make_request(
+            requests.get,
+            self.api + "/queue/",
+            params={"q": self.qname},
+            stream=True,
+        )
+        for line in res.iter_lines(chunk_size=1):
+            if self._stop.is_set():
+                return
+        res = json.loads(line)
+        self.q.put(res["data"])
+        self.q.join()
+        self.make_request(
+            requests.delete,
+            self.api + "/queue/" + res["q"],
+            params={"msgid": res["msgid"]},
+        )
 
 
 class Connection(object):
