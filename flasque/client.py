@@ -100,6 +100,24 @@ class Consumer(ThreadQueue):
         )
 
 
+class StreamConsumer(ThreadQueue):
+
+    def loop(self):
+        res = self.make_request(
+            requests.get,
+            self.api + "/stream/",
+            params={"q": self.qname},
+            stream=True,
+        )
+        for line in res.iter_lines(chunk_size=1):
+            if self._stop.is_set():
+                return
+            if line and line.strip():
+                msg = json.loads(line)
+                self.q.put(msg["data"])
+                self.q.join()
+
+
 class Connection(object):
 
     def __init__(self, api="http://localhost:5000"):
@@ -115,6 +133,12 @@ class Connection(object):
 
     def Consumer(self, *qname):
         consumer = Consumer(self.api, qname)
+        consumer.start()
+        self.threads.append(consumer)
+        return consumer
+
+    def StreamConsumer(self, *qname):
+        consumer = StreamConsumer(self.api, qname)
         consumer.start()
         self.threads.append(consumer)
         return consumer

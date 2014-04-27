@@ -1,9 +1,10 @@
 # -*- coding: utf8 -*-
 
-from .views import QueueApi
+from .views import QueueApi, StreamApi
 from .app import app
 
 queue_view = QueueApi.as_view("queue")
+stream_view = StreamApi.as_view("stream")
 
 app.add_url_rule(
     "/queue/",
@@ -16,3 +17,4 @@ app.add_url_rule(
     view_func=queue_view,
     methods=["GET", "POST", "DELETE"],
 )
+app.add_url_rule("/stream/", view_func=stream_view, methods=["GET"])

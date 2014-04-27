@@ -6,10 +6,15 @@ from flasque.main import get_app
 app = get_app()
 
 
+def publish(*args, **kwargs):
+    return
+
+
 class Test(unittest.TestCase):
 
     def setUp(self):
         app._db = fakeredis.FakeRedis()
+        app._db.publish = publish
         self.app = app.test_client()
 
     def tearDown(self):

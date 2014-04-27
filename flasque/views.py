@@ -6,19 +6,35 @@ from flask.views import MethodView
 from .queue import Queue
 
 
-class QueueApi(MethodView):
+def stream(func, *args, **kwargs):
+    while True:
+        data = func(*args, **kwargs)
+        if data is None:
+            yield
+        else:
+            yield data
 
-    def stream_view(self, func, *args, **kwargs):
-        def stream():
-            while True:
-                data = func(*args, **kwargs)
-                if data is None:
-                    # keep alive
-                    yield "\n\n"
-                else:
-                    yield json.dumps(data)
-                    raise StopIteration
-        return Response(stream(), content_type="text/event-stream")
+
+def stream_forever(func, *args, **kwargs):
+    for data in stream(func, *args, **kwargs):
+        if data is None:
+            # keep alive
+            yield "\n\n"
+        else:
+            yield "%s\n\n" % (json.dumps(data),)
+
+
+def stream_once(func, *args, **kwargs):
+    for data in stream(func, *args, **kwargs):
+        if data is None:
+            # keep alive
+            yield "\n\n"
+        else:
+            yield "%s" % (json.dumps(data),)
+            raise StopIteration
+
+
+class BaseApi(MethodView):
 
     @staticmethod
     def get_qs(q):
@@ -28,8 +44,13 @@ class QueueApi(MethodView):
             qs = [q]
         return qs
 
+
+class QueueApi(BaseApi):
+
     def get(self, q):
-        return self.stream_view(Queue.get_message, self.get_qs(q))
+        return Response(
+            stream_once(Queue.get_message, self.get_qs(q)),
+            content_type="text/event-stream")
 
     def post(self, q):
         return jsonify({
@@ -40,3 +61,12 @@ class QueueApi(MethodView):
         msgid = request.args.get("msgid")
         Queue(q).delete_message(msgid)
         return jsonify({})
+
+
+class StreamApi(BaseApi):
+
+    def get(self):
+        pubsub = Queue.listen(self.get_qs(None))
+        return Response(
+            stream_forever(Queue.pubsub_get_message, pubsub),
+            content_type="text/event-stream")
