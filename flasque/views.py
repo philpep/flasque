@@ -20,16 +20,23 @@ class QueueApi(MethodView):
                     raise StopIteration
         return Response(stream(), content_type="text/event-stream")
 
-    def get(self, name):
-        queue = Queue(name)
-        return self.stream_view(queue.get_message)
+    @staticmethod
+    def get_qs(q):
+        if q is None:
+            qs = request.args.getlist("q")
+        else:
+            qs = [q]
+        return qs
 
-    def post(self, name):
+    def get(self, q):
+        return self.stream_view(Queue.get_message, self.get_qs(q))
+
+    def post(self, q):
         return jsonify({
-            "msgid": Queue(name).put(request.data),
+            "msgid": Queue(q).put(request.data),
         })
 
-    def delete(self, name):
+    def delete(self, q):
         msgid = request.args.get("msgid")
-        Queue(name).delete_message(msgid)
+        Queue(q).delete_message(msgid)
         return jsonify({})

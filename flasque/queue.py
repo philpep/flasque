@@ -17,26 +17,23 @@ class Queue(object):
         db.rpush(self.qkey, msgid)
         return msgid
 
-    def get(self, timeout=1):
-        elm = db.blpop(self.qkey, timeout=timeout)
-        if elm is not None:
-            return elm[1]
+    @staticmethod
+    def get(qs, timeout=1):
+        keys = ["queue:%s" % (q,) for q in qs]
+        return db.blpop(keys, timeout=timeout)
 
-    def get_message(self, msgid=None, timeout=1):
-        if msgid is not None:
+    @staticmethod
+    def get_message(qs, **kwargs):
+        elm = Queue.get(qs, **kwargs)
+        if elm is not None:
+            q, msgid = elm
+            db.lpush(q, msgid)
+            data = db.get(q + ":message:" + msgid)
             return {
                 "msgid": msgid,
-                "data": db.get(self.mkey + msgid),
+                "q": q.split(":")[1],
+                "data": data,
             }
-        else:
-            msgid = self.get(timeout=timeout)
-            if msgid is not None:
-                db.lpush(self.qkey, msgid)
-                data = db.get(self.mkey + msgid)
-                return {
-                    "msgid": msgid,
-                    "data": data,
-                }
 
     def delete_message(self, msgid):
         db.lrem(self.qkey, msgid)

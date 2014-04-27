@@ -10,7 +10,8 @@ class ThreadQueue(threading.Thread):
 
     def __init__(self, api, qname, *args, **kwargs):
         super(ThreadQueue, self).__init__(*args, **kwargs)
-        self.url = api + "/queue/" + qname
+        self.api = api
+        self.qname = qname
         self.q = Queue.Queue()
         self.daemon = True
         self._stop = threading.Event()
@@ -47,7 +48,7 @@ class Producer(ThreadQueue):
             except Queue.Empty:
                 pass
             else:
-                requests.post(self.url, data=data)
+                requests.post(self.api + "/queue/" + self.qname, data=data)
             if self._stop.is_set():
                 return
 
@@ -56,31 +57,38 @@ class Consumer(ThreadQueue):
 
     def run(self):
         while True:
-            res = requests.get(self.url, stream=True)
+            res = requests.get(
+                self.api + "/queue/",
+                params={"q": self.qname},
+                stream=True,
+            )
             for line in res.iter_lines(chunk_size=1):
                 if self._stop.is_set():
                     return
             res = json.loads(line)
             self.q.put(res["data"])
             self.q.join()
-            requests.delete(self.url + "?msgid=" + res["msgid"])
+            requests.delete(
+                self.api + "/queue/" + res["q"],
+                params={"msgid": res["msgid"]},
+            )
 
 
 class Connection(object):
 
-    def __init__(self, api_url="http://localhost:5000"):
-        self.api_url = api_url
+    def __init__(self, api="http://localhost:5000"):
+        self.api = api
         self.threads = []
         super(Connection, self).__init__()
 
     def Producer(self, qname):
-        producer = Producer(self.api_url, qname)
+        producer = Producer(self.api, qname)
         producer.start()
         self.threads.append(producer)
         return producer
 
-    def Consumer(self, qname):
-        consumer = Consumer(self.api_url, qname)
+    def Consumer(self, *qname):
+        consumer = Consumer(self.api, qname)
         consumer.start()
         self.threads.append(consumer)
         return consumer
