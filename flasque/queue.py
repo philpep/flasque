@@ -8,57 +8,106 @@ from .app import db
 
 class Queue(object):
 
-    def __init__(self, name):
-        self.name = name
-        self.qkey = "queue:%s" % (name,)
-        self.mkey = self.qkey + ":message:"
-        self.skey = self.qkey + ":stream"
+    def __init__(self):
+        self._pubsub = None
         super(Queue, self).__init__()
 
-    def put(self, data):
+    def put(self, name, data):
         msgid = uuid.uuid4().hex
-        db.set(self.mkey + msgid, data)
-        db.rpush(self.qkey, msgid)
-        db.publish(self.skey, json.dumps({
-            "msgid": msgid,
-            "q": self.name,
-            "data": data,
-        }))
+        prefix = "queue:" + name
+        db.pipeline().\
+            sadd("queues", name).\
+            set(prefix + ":message:" + msgid, data).\
+            rpush(prefix, msgid).\
+            publish(prefix + ":stream", json.dumps({
+                "msgid": msgid,
+                "q": name,
+                "data": data,
+            })).\
+            incr(prefix + ":count").\
+            publish("queues:status", name).\
+            execute()
         return msgid
 
-    @staticmethod
-    def get(qs, timeout=1):
-        keys = ["queue:%s" % (q,) for q in qs]
-        return db.blpop(keys, timeout=timeout)
+    def get(self, names, timeout=1):
+        return db.blpop(["queue:" + name for name in names], timeout=timeout)
 
-    @staticmethod
-    def get_message(qs, **kwargs):
-        elm = Queue.get(qs, **kwargs)
-        if elm is not None:
-            q, msgid = elm
-            db.lpush(q, msgid)
-            data = db.get(q + ":message:" + msgid)
-            return {
-                "msgid": msgid,
-                "q": q.split(":")[1],
-                "data": data,
-            }
+    def get_message(self, names, pubsub=False, timeout=1):
+        if pubsub:
+            self.subscribe([
+                "queue:" + name + ":stream" for name in names])
+            return self.get_message_pubsub(timeout=timeout)
+        else:
+            elm = self.get(names, timeout=timeout)
+            if elm is not None:
+                prefix, msgid = elm
+                name = prefix.split(":", 1)[1]
+                _, data, _ = db.pipeline().\
+                    lpush(prefix, msgid).\
+                    get(prefix + ":message:" + msgid).\
+                    publish("queues:status", name).\
+                    execute()
+                return {
+                    "msgid": msgid,
+                    "q": name,
+                    "data": data,
+                }
 
-    def delete_message(self, msgid):
-        db.lrem(self.qkey, msgid)
-        db.delete(self.mkey + msgid)
+    def delete_message(self, name, msgid):
+        prefix = "queue:" + name
+        db.pipeline().\
+            lrem(prefix, msgid).\
+            delete(prefix + ":message:" + msgid).\
+            incr(prefix + ":total").\
+            decr(prefix + ":count").\
+            publish("queues:status", name).\
+            execute()
 
-    @staticmethod
-    def pubsub_get_message(pubsub):
-        message = pubsub.get_message()
-        if message is not None and message["type"] == "message":
-            return json.loads(message["data"])
-        elif message is None:
-            time.sleep(1)
+    def subscribe(self, keys):
+        if self._pubsub is None:
+            self._pubsub = db.pubsub()
+            self._pubsub.subscribe(keys)
 
-    @staticmethod
-    def listen(qs):
-        pubsub = db.pubsub()
-        pubsub.subscribe([
-            "queue:%s:stream" % (q,) for q in qs])
-        return pubsub
+    def get_message_pubsub(self, timeout=1):
+        sleep_time = 0
+        while sleep_time < timeout:
+            message = self._pubsub.get_message()
+            if message is not None and message["type"] == "message":
+                return message["data"]
+            elif message is None:
+                time.sleep(0.1)
+                sleep_time += 0.1
+
+    def get_status(self, name=None):
+        if name is None:
+            names = db.smembers("queues")
+        else:
+            names = [name]
+
+        if not names:
+            # no queues
+            return []
+
+        keys = []
+        for name in names:
+            keys.extend([
+                "queue:" + name + ":count",
+                "queue:" + name + ":total",
+            ])
+        values = db.mget(keys)
+        i = 0
+        status = []
+        for name in names:
+            status.append((name, values[i], values[i+1]))
+            i += 2
+        return status
+
+    def iter_status(self):
+        self.subscribe(["queues:status"])
+        yield self.get_status()
+        while True:
+            name = self.get_message_pubsub()
+            if name is not None:
+                yield self.get_status(name)
+            else:
+                yield
