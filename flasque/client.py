@@ -13,8 +13,9 @@ class StopThreadException(Exception):
 
 class ThreadQueue(threading.Thread):
 
-    def __init__(self, api, qname, *args, **kwargs):
+    def __init__(self, conn, api, qname, *args, **kwargs):
         super(ThreadQueue, self).__init__(*args, **kwargs)
+        self.conn = conn
         self.api = api
         self.qname = qname
         self.q = Queue.Queue()
@@ -57,7 +58,8 @@ class ThreadQueue(threading.Thread):
         self._stop.set()
 
     def close(self):
-        self._stop()
+        self.conn.threads.remove(self)
+        self.stop()
         self.join()
 
 
@@ -127,19 +129,19 @@ class Connection(object):
         super(Connection, self).__init__()
 
     def Producer(self, qname):
-        producer = Producer(self.api, qname)
+        producer = Producer(self, self.api, qname)
         producer.start()
         self.threads.append(producer)
         return producer
 
     def Consumer(self, *qname):
-        consumer = Consumer(self.api, qname)
+        consumer = Consumer(self, self.api, qname)
         consumer.start()
         self.threads.append(consumer)
         return consumer
 
     def StreamConsumer(self, *qname):
-        consumer = StreamConsumer(self.api, qname)
+        consumer = StreamConsumer(self, self.api, qname)
         consumer.start()
         self.threads.append(consumer)
         return consumer
@@ -150,6 +152,9 @@ class Connection(object):
         for th in self.threads:
             th.join()
         self.threads = []
+
+    def remove(self, thread):
+        self.threads.remove(thread)
 
     def __enter__(self):
         return self
