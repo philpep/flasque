@@ -33,17 +33,16 @@ class ThreadQueue(threading.Thread):
 
     def make_request(self, func, *args, **kwargs):
         while True:
-            if self._stop.is_set():
-                raise StopThreadException
             try:
                 res = func(*args, **kwargs)
             except requests.exceptions.RequestException:
-                time.sleep(1)
+                pass
             else:
                 if res.status_code == 200:
                     return res
-                else:
-                    time.sleep(1)
+            if self._stop.is_set():
+                raise StopThreadException
+            time.sleep(1)
 
     def get(self, *args, **kwargs):
         return self.q.get(*args, **kwargs)
