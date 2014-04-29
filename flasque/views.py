@@ -57,6 +57,15 @@ class StreamApi(BaseApi):
         names = self.get_names()
         return sse_response(Queue().iter_messages(names, pubsub=True))
 
+    def post(self):
+        names = self.get_names()
+        q = Queue()
+        for item in request.environ["wsgi.input"]:
+            for line in item.splitlines():
+                if line:
+                    q.publish(names, line[6:])
+        return jsonify({})
+
 
 def stream_status():
     return sse_response(Queue().iter_status(), json_data=True)

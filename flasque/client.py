@@ -120,6 +120,28 @@ class StreamConsumer(ThreadQueue):
                 self.q.join()
 
 
+class StreamProducer(ThreadQueue):
+
+    def generate(self):
+        while True:
+            try:
+                data = self.get(timeout=1)
+            except Queue.Empty:
+                pass
+            else:
+                yield "data: %s\n\n" % (data,)
+            if self._stop.is_set():
+                raise StopThreadException
+
+    def loop(self):
+        self.make_request(
+            requests.post,
+            self.api + "/stream/",
+            params={"q": self.qname},
+            data=self.generate(),
+        )
+
+
 class Connection(object):
 
     def __init__(self, api="http://localhost:5000"):
@@ -127,23 +149,22 @@ class Connection(object):
         self.threads = []
         super(Connection, self).__init__()
 
+    def register(self, thread):
+        thread.start()
+        self.threads.append(thread)
+        return thread
+
     def Producer(self, qname):
-        producer = Producer(self, self.api, qname)
-        producer.start()
-        self.threads.append(producer)
-        return producer
+        return self.register(Producer(self, self.api, qname))
 
     def Consumer(self, *qname):
-        consumer = Consumer(self, self.api, qname)
-        consumer.start()
-        self.threads.append(consumer)
-        return consumer
+        return self.register(Consumer(self, self.api, qname))
 
     def StreamConsumer(self, *qname):
-        consumer = StreamConsumer(self, self.api, qname)
-        consumer.start()
-        self.threads.append(consumer)
-        return consumer
+        return self.register(StreamConsumer(self, self.api, qname))
+
+    def StreamProducer(self, *qname):
+        return self.register(StreamProducer(self, self.api, qname))
 
     def close(self):
         for th in self.threads:

@@ -19,7 +19,7 @@ class Queue(object):
             sadd("queues", name).\
             set(prefix + ":message:" + msgid, data).\
             rpush(prefix, msgid).\
-            publish(prefix + ":stream", json.dumps({
+            publish("stream:" + name, json.dumps({
                 "msgid": msgid,
                 "q": name,
                 "data": data,
@@ -35,7 +35,7 @@ class Queue(object):
     def get_message(self, names, pubsub=False, timeout=1):
         if pubsub:
             self.subscribe([
-                "queue:" + name + ":stream" for name in names])
+                "stream:" + name for name in names])
             return self.get_message_pubsub(timeout=timeout)
         else:
             elm = self.get(names, timeout=timeout)
@@ -81,6 +81,17 @@ class Queue(object):
             elif message is None:
                 time.sleep(0.1)
                 sleep_time += 0.1
+
+    def publish(self, names, data):
+        pipe = db.pipeline()
+        json_data = json.dumps({
+            "msgid": None,
+            "q": None,
+            "data": data,
+        })
+        for name in names:
+            pipe = pipe.publish("stream:" + name, json_data)
+        pipe.execute()
 
     def get_status(self, name=None):
         if name is None:
