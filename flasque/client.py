@@ -75,7 +75,7 @@ class Producer(ThreadQueue):
                 data=data,
             )
         if self._stop.is_set():
-            return
+            raise StopThreadException
 
 
 class Consumer(ThreadQueue):
@@ -89,7 +89,7 @@ class Consumer(ThreadQueue):
         )
         for line in res.iter_lines(chunk_size=1):
             if self._stop.is_set():
-                return
+                raise StopThreadException
         msg = json.loads(line)
         self.q.put(msg["data"])
         self.q.join()
@@ -111,7 +111,7 @@ class StreamConsumer(ThreadQueue):
         )
         for line in res.iter_lines(chunk_size=1):
             if self._stop.is_set():
-                return
+                raise StopThreadException
             if line and line.strip():
                 msg = json.loads(line)
                 self.q.put(msg["data"])
