@@ -29,12 +29,14 @@ launch `flasque` server::
 ::
 
     from flasque.client import Connection
-    with Connection() as conn:
+
+    with Connection("http://localhost:5000") as conn:
         producer = conn.Producer("my_queue")
         consumer = conn.Consumer("my_queue")
         producer.put("hello world")
         message = consumer.get()
-        print(message)
+        print("received " + message)
+        # You have to acknowledge the message
         consumer.task_done()
 
 
