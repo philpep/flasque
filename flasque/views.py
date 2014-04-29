@@ -6,32 +6,20 @@ from flask.views import MethodView
 from .queue import Queue
 
 
-def stream(func, *args, **kwargs):
-    while True:
-        data = func(*args, **kwargs)
-        if data is None:
-            yield
-        else:
-            yield data
-
-
-def stream_forever(func, *args, **kwargs):
-    for data in stream(func, *args, **kwargs):
-        if data is None:
-            # keep alive
-            yield "\n\n"
-        else:
-            yield "%s\n\n" % (data,)
-
-
-def stream_once(func, *args, **kwargs):
-    for data in stream(func, *args, **kwargs):
-        if data is None:
-            # keep alive
-            yield "\n\n"
-        else:
-            yield "%s" % (json.dumps(data),)
-            raise StopIteration
+def sse_response(iterator, once=False, json_data=False):
+    def _sse():
+        # partial sse implementation
+        for data in iterator:
+            if data is None:
+                # keep alive
+                yield "data: \n\n"
+            else:
+                if json_data:
+                    data = json.dumps(data)
+                yield "data: %s\n\n" % (data,)
+                if once:
+                    raise StopIteration
+    return Response(_sse(), content_type="text/event-stream")
 
 
 class BaseApi(MethodView):
@@ -49,9 +37,8 @@ class QueueApi(BaseApi):
 
     def get(self, q):
         names = self.get_names(q)
-        return Response(
-            stream_once(Queue().get_message, names),
-            content_type="text/event-stream")
+        return sse_response(
+            Queue().iter_messages(names), once=True, json_data=True)
 
     def post(self, q):
         return jsonify({
@@ -68,19 +55,11 @@ class StreamApi(BaseApi):
 
     def get(self):
         names = self.get_names()
-        return Response(
-            stream_forever(Queue.get_message, names, pubsub=True),
-            content_type="text/event-stream")
+        return sse_response(Queue().iter_messages(names, pubsub=True))
 
 
 def stream_status():
-    def stream():
-        for status in Queue().iter_status():
-            if status is not None:
-                yield "data: %s\n\n" % (json.dumps(status),)
-            else:
-                yield "data: \n\n"
-    return Response(stream(), content_type="text/event-stream")
+    return sse_response(Queue().iter_status(), json_data=True)
 
 
 def index():

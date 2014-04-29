@@ -53,6 +53,10 @@ class Queue(object):
                     "data": data,
                 }
 
+    def iter_messages(self, *args, **kwargs):
+        while True:
+            yield self.get_message(*args, **kwargs)
+
     def delete_message(self, name, msgid):
         prefix = "queue:" + name
         db.pipeline().\
