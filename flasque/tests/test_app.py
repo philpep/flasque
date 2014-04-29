@@ -26,7 +26,7 @@ class Test(unittest.TestCase):
         self.app.post("/queue/foo", data="bar")
         for x in range(2):
             res = self.app.get("/queue/foo")
-            self.assertEqual(json.loads(res.data)["data"], "foo")
+            self.assertEqual(json.loads(res.data[6:])["data"], "foo")
         res = self.app.delete("/queue/foo?msgid=%s" % msgid)
         res = self.app.get("/queue/foo")
-        self.assertEqual(json.loads(res.data)["data"], "bar")
+        self.assertEqual(json.loads(res.data[6:])["data"], "bar")
