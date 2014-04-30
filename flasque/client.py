@@ -11,6 +11,18 @@ class StopThreadException(Exception):
     pass
 
 
+class Message(object):
+
+    def __init__(self, msgid, channel, data):
+        self.id = msgid
+        self.channel = channel
+        self.data = data
+        super(Message, self).__init__()
+
+    def __str__(self):
+        return self.data
+
+
 class ThreadQueue(threading.Thread):
 
     def __init__(self, conn, api, qname, *args, **kwargs):
@@ -45,7 +57,9 @@ class ThreadQueue(threading.Thread):
             time.sleep(1)
 
     def get(self, *args, **kwargs):
-        return self.q.get(*args, **kwargs)
+        js = self.q.get(*args, **kwargs)
+        if js is not None:
+            return Message(js["id"], js["channel"], js["data"])
 
     def put(self, *args, **kwargs):
         return self.q.put(*args, **kwargs)
@@ -66,7 +80,7 @@ class Producer(ThreadQueue):
 
     def loop(self):
         try:
-            data = self.get(timeout=1)
+            data = self.q.get(timeout=1)
         except Queue.Empty:
             pass
         else:
@@ -93,7 +107,7 @@ class Consumer(ThreadQueue):
                 raise StopThreadException
             if line and line[6:]:
                 msg = json.loads(line[6:])
-        self.q.put(msg["data"])
+        self.q.put(msg)
         self.q.join()
         self.make_request(
             requests.delete,
@@ -116,7 +130,7 @@ class ChannelConsumer(ThreadQueue):
                 raise StopThreadException
             if line and line[6:]:
                 msg = json.loads(line[6:])
-                self.q.put(msg["data"])
+                self.q.put(msg)
                 self.q.join()
 
 
@@ -125,7 +139,7 @@ class ChannelProducer(ThreadQueue):
     def generate(self):
         while True:
             try:
-                data = self.get(timeout=1)
+                data = self.q.get(timeout=1)
             except Queue.Empty:
                 pass
             else:

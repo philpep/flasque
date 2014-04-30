@@ -88,7 +88,7 @@ class Queue(object):
     def publish(self, channel, data):
         db.publish("stream:" + channel, json.dumps({
             "id": None,
-            "channel": None,
+            "channel": channel,
             "data": data,
         }))
 
