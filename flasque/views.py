@@ -25,45 +25,46 @@ def sse_response(iterator, once=False, json_data=False):
 class BaseApi(MethodView):
 
     @staticmethod
-    def get_names(q=None):
-        if q is None:
-            names = request.args.getlist("q")
+    def get_channels(channel=None):
+        if channel is None:
+            channels = request.args.getlist("channel")
         else:
-            names = [q]
-        return names
+            channels = [channel]
+        return channels
 
 
 class QueueApi(BaseApi):
 
-    def get(self, q):
-        names = self.get_names(q)
+    def get(self, channel):
+        channels = self.get_channels(channel)
         return sse_response(
-            Queue().iter_messages(names), once=True, json_data=True)
+            Queue().iter_messages(channels), once=True, json_data=True)
 
-    def post(self, q):
+    def post(self, channel):
         return jsonify({
-            "msgid": Queue().put(q, request.data),
+            "id": Queue().put(channel, request.data),
         })
 
-    def delete(self, q):
-        msgid = request.args.get("msgid")
-        Queue().delete_message(q, msgid)
+    def delete(self, channel):
+        msgid = request.args.get("id")
+        Queue().delete_message(channel, msgid)
         return jsonify({})
 
 
-class StreamApi(BaseApi):
+class ChannelApi(BaseApi):
 
-    def get(self):
-        names = self.get_names()
-        return sse_response(Queue().iter_messages(names, pubsub=True))
+    def get(self, channel):
+        return sse_response(
+            Queue().iter_messages(self.get_channels(channel), pubsub=True))
 
-    def post(self):
-        names = self.get_names()
+    @staticmethod
+    def post(channel):
+        channel = ChannelApi.get_channels(channel)[0]
         q = Queue()
         for item in request.environ["wsgi.input"]:
             for line in item.splitlines():
-                if line:
-                    q.publish(names, line[6:])
+                if line[6:]:
+                    q.publish(channel, line[6:])
         return jsonify({})
 
 

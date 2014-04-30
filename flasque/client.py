@@ -85,7 +85,7 @@ class Consumer(ThreadQueue):
         res = self.make_request(
             requests.get,
             self.api + "/queue/",
-            params={"q": self.qname},
+            params={"channel": self.qname},
             stream=True,
         )
         for line in res.iter_lines(chunk_size=1):
@@ -97,18 +97,18 @@ class Consumer(ThreadQueue):
         self.q.join()
         self.make_request(
             requests.delete,
-            self.api + "/queue/" + msg["q"],
-            params={"msgid": msg["msgid"]},
+            self.api + "/queue/" + msg["channel"],
+            params={"id": msg["id"]},
         )
 
 
-class StreamConsumer(ThreadQueue):
+class ChannelConsumer(ThreadQueue):
 
     def loop(self):
         res = self.make_request(
             requests.get,
-            self.api + "/stream/",
-            params={"q": self.qname},
+            self.api + "/channel/",
+            params={"channel": self.qname},
             stream=True,
         )
         for line in res.iter_lines(chunk_size=1):
@@ -120,7 +120,7 @@ class StreamConsumer(ThreadQueue):
                 self.q.join()
 
 
-class StreamProducer(ThreadQueue):
+class ChannelProducer(ThreadQueue):
 
     def generate(self):
         while True:
@@ -136,8 +136,7 @@ class StreamProducer(ThreadQueue):
     def loop(self):
         self.make_request(
             requests.post,
-            self.api + "/stream/",
-            params={"q": self.qname},
+            self.api + "/channel/" + self.qname,
             data=self.generate(),
         )
 
@@ -160,11 +159,11 @@ class Connection(object):
     def Consumer(self, *qname):
         return self.register(Consumer(self, self.api, qname))
 
-    def StreamConsumer(self, *qname):
-        return self.register(StreamConsumer(self, self.api, qname))
+    def ChannelConsumer(self, *qname):
+        return self.register(ChannelConsumer(self, self.api, qname))
 
-    def StreamProducer(self, *qname):
-        return self.register(StreamProducer(self, self.api, qname))
+    def ChannelProducer(self, qname):
+        return self.register(ChannelProducer(self, self.api, qname))
 
     def close(self):
         for th in self.threads:

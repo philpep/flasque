@@ -12,44 +12,47 @@ class Queue(object):
         self._pubsub = None
         super(Queue, self).__init__()
 
-    def put(self, name, data):
+    def put(self, channel, data):
         msgid = uuid.uuid4().hex
-        prefix = "queue:" + name
+        prefix = "queue:" + channel
         db.pipeline().\
-            sadd("queues", name).\
+            sadd("queues", channel).\
             set(prefix + ":message:" + msgid, data).\
             rpush(prefix, msgid).\
-            publish("stream:" + name, json.dumps({
-                "msgid": msgid,
-                "q": name,
+            publish("stream:" + channel, json.dumps({
+                "id": msgid,
+                "channel": channel,
                 "data": data,
             })).\
             incr(prefix + ":count").\
-            publish("queues:status", name).\
+            publish("queues:status", channel).\
             execute()
         return msgid
 
-    def get(self, names, timeout=1):
-        return db.blpop(["queue:" + name for name in names], timeout=timeout)
+    def get(self, channels, timeout=1):
+        return db.blpop(
+            ["queue:" + channel for channel in channels],
+            timeout=timeout
+        )
 
-    def get_message(self, names, pubsub=False, timeout=1):
+    def get_message(self, channels, pubsub=False, timeout=1):
         if pubsub:
             self.subscribe([
-                "stream:" + name for name in names])
+                "stream:" + channel for channel in channels])
             return self.get_message_pubsub(timeout=timeout)
         else:
-            elm = self.get(names, timeout=timeout)
+            elm = self.get(channels, timeout=timeout)
             if elm is not None:
                 prefix, msgid = elm
-                name = prefix.split(":", 1)[1]
+                channel = prefix.split(":", 1)[1]
                 _, data, _ = db.pipeline().\
                     lpush(prefix, msgid).\
                     get(prefix + ":message:" + msgid).\
-                    publish("queues:status", name).\
+                    publish("queues:status", channel).\
                     execute()
                 return {
-                    "msgid": msgid,
-                    "q": name,
+                    "id": msgid,
+                    "channel": channel,
                     "data": data,
                 }
 
@@ -57,14 +60,14 @@ class Queue(object):
         while True:
             yield self.get_message(*args, **kwargs)
 
-    def delete_message(self, name, msgid):
-        prefix = "queue:" + name
+    def delete_message(self, channel, msgid):
+        prefix = "queue:" + channel
         db.pipeline().\
             lrem(prefix, msgid).\
             delete(prefix + ":message:" + msgid).\
             incr(prefix + ":total").\
             decr(prefix + ":count").\
-            publish("queues:status", name).\
+            publish("queues:status", channel).\
             execute()
 
     def subscribe(self, keys):
@@ -82,38 +85,34 @@ class Queue(object):
                 time.sleep(0.1)
                 sleep_time += 0.1
 
-    def publish(self, names, data):
-        pipe = db.pipeline()
-        json_data = json.dumps({
-            "msgid": None,
-            "q": None,
+    def publish(self, channel, data):
+        db.publish("stream:" + channel, json.dumps({
+            "id": None,
+            "channel": None,
             "data": data,
-        })
-        for name in names:
-            pipe = pipe.publish("stream:" + name, json_data)
-        pipe.execute()
+        }))
 
-    def get_status(self, name=None):
-        if name is None:
-            names = db.smembers("queues")
+    def get_status(self, channel=None):
+        if channel is None:
+            channels = db.smembers("queues")
         else:
-            names = [name]
+            channels = [channel]
 
-        if not names:
+        if not channel:
             # no queues
             return []
 
         keys = []
-        for name in names:
+        for channel in channels:
             keys.extend([
-                "queue:" + name + ":count",
-                "queue:" + name + ":total",
+                "queue:" + channel + ":count",
+                "queue:" + channel + ":total",
             ])
         values = db.mget(keys)
         i = 0
         status = []
-        for name in names:
-            status.append((name, values[i], values[i+1]))
+        for channel in channels:
+            status.append((channels, values[i], values[i+1]))
             i += 2
         return status
 
@@ -121,8 +120,8 @@ class Queue(object):
         self.subscribe(["queues:status"])
         yield self.get_status()
         while True:
-            name = self.get_message_pubsub()
-            if name is not None:
-                yield self.get_status(name)
+            channel = self.get_message_pubsub()
+            if channel is not None:
+                yield self.get_status(channel)
             else:
                 yield
