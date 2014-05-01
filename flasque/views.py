@@ -63,8 +63,8 @@ class ChannelApi(BaseApi):
         q = Queue()
         for item in request.environ["wsgi.input"]:
             for line in item.splitlines():
-                if line[6:]:
-                    q.publish(channel, line[6:])
+                if line:
+                    q.publish(channel, line)
         return jsonify({})
 
 

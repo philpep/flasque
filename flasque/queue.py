@@ -6,6 +6,10 @@ import time
 from .app import db
 
 
+def get_uuid():
+    return uuid.uuid4().hex
+
+
 class Queue(object):
 
     def __init__(self):
@@ -13,7 +17,7 @@ class Queue(object):
         super(Queue, self).__init__()
 
     def put(self, channel, data):
-        msgid = uuid.uuid4().hex
+        msgid = get_uuid()
         prefix = "queue:" + channel
         db.pipeline().\
             sadd("queues", channel).\

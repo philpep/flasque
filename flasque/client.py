@@ -143,7 +143,7 @@ class ChannelProducer(ThreadQueue):
             except Queue.Empty:
                 pass
             else:
-                yield "data: %s\n\n" % (data,)
+                yield "%s\n\n" % (data,)
             if self._stop.is_set():
                 raise StopThreadException
 
