@@ -14,7 +14,7 @@ class Test(unittest.TestCase):
         self.publish = app._db.publish = mock.Mock()
         self.pubsub = app._db.pubsub = mock.Mock()
         self.app = app.test_client()
-        self.get_uuid = mock.patch("flasque.queue.get_uuid")
+        self.get_uuid = mock.patch("flasque.utils.get_uuid")
         uuid = self.get_uuid.start()
         uuid.side_effect = (str(x) for x in xrange(10))
 

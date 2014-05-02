@@ -1,13 +1,9 @@
 # -*- coding: utf8 -*-
 
-import uuid
 import json
 import time
 from .app import db
-
-
-def get_uuid():
-    return uuid.uuid4().hex
+from .utils import get_uuid
 
 
 class Queue(object):
