@@ -25,9 +25,8 @@ class Message(object):
 
 class ThreadQueue(threading.Thread):
 
-    def __init__(self, conn, api, qname, *args, **kwargs):
-        super(ThreadQueue, self).__init__(*args, **kwargs)
-        self.conn = conn
+    def __init__(self, api, qname):
+        super(ThreadQueue, self).__init__()
         self.api = api
         self.qname = qname
         self.q = Queue.Queue()
@@ -57,8 +56,17 @@ class ThreadQueue(threading.Thread):
                 raise StopThreadException
             time.sleep(1)
 
-    def get(self, *args, **kwargs):
-        js = self.q.get(*args, **kwargs)
+    def get(self, timeout=None):
+        if timeout is None:
+            while True:
+                try:
+                    js = self.q.get(timeout=1)
+                except Queue.Empty:
+                    pass
+                else:
+                    break
+        else:
+            js = self.q.get(timeout=timeout)
         if js is not None:
             return Message(js["id"], js["channel"], js["data"])
 
@@ -70,11 +78,6 @@ class ThreadQueue(threading.Thread):
 
     def stop(self):
         self._stop.set()
-
-    def close(self):
-        self.conn.threads.remove(self)
-        self.stop()
-        self.join()
 
 
 class Producer(ThreadQueue):
@@ -96,8 +99,8 @@ class Producer(ThreadQueue):
 
 class Consumer(ThreadQueue):
 
-    def __init__(self, msgid, channel, data, pending=False):
-        super(Consumer, self).__init__(msgid, channel, data)
+    def __init__(self, api, qname, pending=False):
+        super(Consumer, self).__init__(api, qname)
         self.params = {"channel": self.qname}
         if pending:
             self.params["pending"] = "1"
@@ -166,32 +169,32 @@ class Connection(object):
 
     def __init__(self, api="http://localhost:5000"):
         self.api = api
-        self.threads = []
+        self.threads = set()
         super(Connection, self).__init__()
 
     def register(self, thread):
         thread.start()
-        self.threads.append(thread)
+        self.threads.add(thread)
         return thread
 
     def Producer(self, qname):
-        return self.register(Producer(self, self.api, qname))
+        return self.register(Producer(self.api, qname))
 
     def Consumer(self, qname, pending=False):
-        return self.register(Consumer(self, self.api, qname, pending=pending))
+        return self.register(Consumer(self.api, qname, pending=pending))
 
     def ChannelConsumer(self, qname):
-        return self.register(ChannelConsumer(self, self.api, qname))
+        return self.register(ChannelConsumer(self.api, qname))
 
     def ChannelProducer(self, qname):
-        return self.register(ChannelProducer(self, self.api, qname))
+        return self.register(ChannelProducer(self.api, qname))
 
     def close(self):
-        for th in self.threads:
-            th.stop()
-        for th in self.threads:
-            th.join()
-        self.threads = []
+        for thread in self.threads:
+            thread.stop()
+        for thread in self.threads:
+            thread.join()
+        self.threads = set()
 
     def remove(self, thread):
         self.threads.remove(thread)
