@@ -96,11 +96,17 @@ class Producer(ThreadQueue):
 
 class Consumer(ThreadQueue):
 
+    def __init__(self, msgid, channel, data, pending=False):
+        super(Consumer, self).__init__(msgid, channel, data)
+        self.params = {"channel": self.qname}
+        if pending:
+            self.params["pending"] = "1"
+
     def loop(self):
         res = self.make_request(
             self.session.get,
             self.api + "/queue/",
-            params={"channel": self.qname},
+            params=self.params,
             stream=True,
         )
         for line in res.iter_lines(chunk_size=1):
@@ -171,10 +177,10 @@ class Connection(object):
     def Producer(self, qname):
         return self.register(Producer(self, self.api, qname))
 
-    def Consumer(self, *qname):
-        return self.register(Consumer(self, self.api, qname))
+    def Consumer(self, qname, pending=False):
+        return self.register(Consumer(self, self.api, qname, pending=pending))
 
-    def ChannelConsumer(self, *qname):
+    def ChannelConsumer(self, qname):
         return self.register(ChannelConsumer(self, self.api, qname))
 
     def ChannelProducer(self, qname):

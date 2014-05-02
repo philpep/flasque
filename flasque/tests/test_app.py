@@ -14,7 +14,7 @@ class Test(unittest.TestCase):
         self.publish = app._db.publish = mock.Mock()
         self.pubsub = app._db.pubsub = mock.Mock()
         self.app = app.test_client()
-        self.get_uuid = mock.patch("flasque.utils.get_uuid")
+        self.get_uuid = mock.patch("flasque.queue.get_uuid")
         uuid = self.get_uuid.start()
         uuid.side_effect = (str(x) for x in xrange(10))
 
@@ -32,21 +32,46 @@ class Test(unittest.TestCase):
                 self.assertIsNone(expected[i])
             self.assertEqual(i < len(expected) + 1, True)
 
-    def test_queue(self):
-        res = self.app.post("/queue/foo", data="foo")
-        msgid = json.loads(res.data)["id"]
-        self.app.post("/queue/foo", data="bar")
-        for x in range(2):
-            res = self.app.get("/queue/foo")
-            self.assertEqual(json.loads(res.data[6:]), {
-                "id": msgid,
-                "channel": "foo",
-                "data": "foo",
-            })
-        res = self.app.delete("/queue/foo?id=%s" % msgid)
+    def post(self, queue, data):
+        res = self.app.post("/queue/" + queue, data=data)
+        return json.loads(res.data)["id"]
+
+    def delete(self, queue, msgid):
+        res = self.app.delete("/queue/" + queue + "?id=" + msgid)
         self.assertEqual(json.loads(res.data), {})
-        res = self.app.get("/queue/foo")
-        self.assertEqual(json.loads(res.data[6:])["data"], "bar")
+
+    def assertGetEqual(self, queue, expected, pending=False):
+        if pending:
+            res = self.app.get("/queue/" + queue + "?pending=1")
+        else:
+            res = self.app.get("/queue/" + queue)
+        expected.setdefault("channel", queue)
+        self.assertEqual(json.loads(res.data[6:]), expected)
+
+    def test_get_delete(self):
+        msgid = self.post("foo", "bar")
+        self.assertGetEqual("foo", {
+            "id": msgid,
+            "data": "bar",
+        })
+        self.delete("foo", msgid)
+
+    def test_get_pending(self):
+        foo_msgid = self.post("foo", "foo")
+        bar_msgid = self.post("foo", "bar")
+        self.assertGetEqual("foo", {
+            "id": foo_msgid,
+            "data": "foo",
+        })
+        self.assertGetEqual("foo", {
+            "id": foo_msgid,
+            "data": "foo",
+        }, pending=True)
+        self.delete("foo", foo_msgid)
+        self.assertGetEqual("foo", {
+            "id": bar_msgid,
+            "data": "bar",
+        })
 
     def test_wait_queue(self):
         self.app.post("/queue/foo", data="bar")

@@ -29,27 +29,36 @@ class Queue(object):
             execute()
         return msgid
 
-    def get(self, channels, timeout=1):
-        return db.blpop(
-            ["queue:" + channel for channel in channels],
-            timeout=timeout
-        )
-
-    def get_message(self, channels, pubsub=False, timeout=1):
+    def get_message(self, channels, pending=False, pubsub=False, timeout=1):
         if pubsub:
             self.subscribe([
                 "stream:" + channel for channel in channels])
             return self.get_message_pubsub(timeout=timeout)
         else:
-            elm = self.get(channels, timeout=timeout)
+            queues = []
+            for channel in channels:
+                if pending:
+                    queues.extend([
+                        "queue:" + channel + ":pending",
+                        "queue:" + channel,
+                    ])
+                else:
+                    queues.append("queue:" + channel)
+
+            elm = db.blpop(queues, timeout=1)
             if elm is not None:
-                prefix, msgid = elm
-                channel = prefix.split(":", 1)[1]
-                _, data, _ = db.pipeline().\
-                    lpush(prefix, msgid).\
-                    get(prefix + ":message:" + msgid).\
-                    publish("queues:status", channel).\
-                    execute()
+                queue, msgid = elm
+                channel = queue.split(":")[1]
+                pending = "queue:" + channel + ":pending"
+                pipe = db.pipeline().\
+                    get("queue:" + channel + ":message:" + msgid).\
+                    lpush(pending, msgid).\
+                    publish("queues:status", channel)
+                if queue != pending:
+                    pipe = pipe.\
+                        decr(queue + ":count").\
+                        incr(pending + ":count")
+                data = pipe.execute()[0]
                 return {
                     "id": msgid,
                     "channel": channel,
@@ -63,10 +72,10 @@ class Queue(object):
     def delete_message(self, channel, msgid):
         prefix = "queue:" + channel
         db.pipeline().\
-            lrem(prefix, msgid).\
+            lrem(prefix + ":pending", msgid).\
             delete(prefix + ":message:" + msgid).\
             incr(prefix + ":total").\
-            decr(prefix + ":count").\
+            decr(prefix + ":pending:count").\
             publish("queues:status", channel).\
             execute()
 
@@ -106,14 +115,16 @@ class Queue(object):
         for channel in channels:
             keys.extend([
                 "queue:" + channel + ":count",
+                "queue:" + channel + ":pending:count",
                 "queue:" + channel + ":total",
             ])
         values = db.mget(keys)
         i = 0
         status = []
         for channel in channels:
-            status.append((channels, values[i], values[i+1]))
-            i += 2
+            status.append((
+                channels, values[i], values[i+1], values[i+2]))
+            i += 3
         return status
 
     def iter_status(self):

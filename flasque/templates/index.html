@@ -28,6 +28,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Waiting</th>
+                            <th>Pending</th>
                             <th>Done</th>
                         </tr>
                     </thead>
@@ -52,10 +53,12 @@
                                         "<td>"+data[item][0]+"</td>"+
                                         "<td>"+data[item][1]+"</td>"+
                                         "<td>"+data[item][2]+"</td>"+
+                                        "<td>"+data[item][3]+"</td>"+
                                     "</tr>")
                             } else {
                                 $("#" + id + " td:nth-child(2)").html(data[item][1]);
                                 $("#" + id + " td:nth-child(3)").html(data[item][2]);
+                                $("#" + id + " td:nth-child(4)").html(data[item][3]);
                             }
                         }
                     }

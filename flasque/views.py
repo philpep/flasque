@@ -37,8 +37,13 @@ class QueueApi(BaseApi):
 
     def get(self, channel):
         channels = self.get_channels(channel)
+        if request.args.get("pending", "0") == "1":
+            pending = True
+        else:
+            pending = False
         return sse_response(
-            Queue().iter_messages(channels), once=True, json_data=True)
+            Queue().iter_messages(channels, pending=pending),
+            once=True, json_data=True)
 
     def post(self, channel):
         return jsonify({
