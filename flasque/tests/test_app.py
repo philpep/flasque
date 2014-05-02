@@ -3,8 +3,7 @@ import unittest
 import fakeredis
 import mock
 
-from flasque.main import get_app
-app = get_app()
+from flasque.main import app
 
 
 class Test(unittest.TestCase):

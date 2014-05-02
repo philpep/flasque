@@ -1,4 +1,5 @@
 -e git+https://github.com/andymccurdy/redis-py@master#egg=redis
 flask
+flask-script
 gevent
 requests

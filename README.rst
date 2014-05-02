@@ -24,7 +24,7 @@ Hello world
 
 launch `flasque` server::
 
-    $ flasque
+    $ flasque runserver
 
 ::
 
