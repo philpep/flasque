@@ -32,6 +32,7 @@ class ThreadQueue(threading.Thread):
         self.qname = qname
         self.q = Queue.Queue()
         self.daemon = True
+        self.session = requests.Session()
         self._stop = threading.Event()
 
     def run(self):
@@ -85,7 +86,7 @@ class Producer(ThreadQueue):
             pass
         else:
             self.make_request(
-                requests.post,
+                self.session.post,
                 self.api + "/queue/" + self.qname,
                 data=data,
             )
@@ -97,7 +98,7 @@ class Consumer(ThreadQueue):
 
     def loop(self):
         res = self.make_request(
-            requests.get,
+            self.session.get,
             self.api + "/queue/",
             params={"channel": self.qname},
             stream=True,
@@ -110,7 +111,7 @@ class Consumer(ThreadQueue):
         self.q.put(msg)
         self.q.join()
         self.make_request(
-            requests.delete,
+            self.session.delete,
             self.api + "/queue/" + msg["channel"],
             params={"id": msg["id"]},
         )
@@ -120,7 +121,7 @@ class ChannelConsumer(ThreadQueue):
 
     def loop(self):
         res = self.make_request(
-            requests.get,
+            self.session.get,
             self.api + "/channel/",
             params={"channel": self.qname},
             stream=True,
@@ -149,7 +150,7 @@ class ChannelProducer(ThreadQueue):
 
     def loop(self):
         self.make_request(
-            requests.post,
+            self.session.post,
             self.api + "/channel/" + self.qname,
             data=self.generate(),
         )
