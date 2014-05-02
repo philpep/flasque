@@ -107,7 +107,7 @@ class Queue(object):
         else:
             channels = [channel]
 
-        if not channel:
+        if not channels:
             # no queues
             return []
 
@@ -123,7 +123,7 @@ class Queue(object):
         status = []
         for channel in channels:
             status.append((
-                channels, values[i], values[i+1], values[i+2]))
+                channel, values[i], values[i+1], values[i+2]))
             i += 3
         return status
 
