@@ -101,7 +101,7 @@ class Test(unittest.TestCase):
 
     def test_publish(self):
         self.app.post("/channel/foo", data="bar")
-        self.publish.assert_called_with("stream:foo", json.dumps({
+        self.publish.assert_called_with("channel:foo", json.dumps({
             "id": None,
             "channel": "foo",
             "data": "bar"}

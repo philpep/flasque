@@ -17,9 +17,10 @@ class Queue(object):
         prefix = "queue:" + channel
         db.pipeline().\
             sadd("queues", channel).\
+            sadd("channels", channel).\
             set(prefix + ":message:" + msgid, data).\
             rpush(prefix, msgid).\
-            publish("stream:" + channel, json.dumps({
+            publish("channel:" + channel, json.dumps({
                 "id": msgid,
                 "channel": channel,
                 "data": data,
@@ -32,7 +33,7 @@ class Queue(object):
     def get_message(self, channels, pending=False, pubsub=False, timeout=1):
         if pubsub:
             self.subscribe([
-                "stream:" + channel for channel in channels])
+                "channel:" + channel for channel in channels])
             return self.get_message_pubsub(timeout=timeout)
         else:
             queues = []
@@ -95,11 +96,14 @@ class Queue(object):
                 sleep_time += 0.1
 
     def publish(self, channel, data):
-        db.publish("stream:" + channel, json.dumps({
-            "id": None,
-            "channel": channel,
-            "data": data,
-        }))
+        db.pipeline().\
+            sadd("channels", channel).\
+            publish("channel:" + channel, json.dumps({
+                "id": None,
+                "channel": channel,
+                "data": data,
+            })).\
+            execute()
 
     def get_status(self, channel=None):
         if channel is None:
