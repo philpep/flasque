@@ -47,7 +47,7 @@ class QueueApi(BaseApi):
 
     def post(self, channel):
         return jsonify({
-            "id": Queue().put(channel, request.data),
+            "id": Queue().put(channel, request.data.decode()),
         })
 
     def delete(self, channel):
@@ -69,7 +69,7 @@ class ChannelApi(BaseApi):
         for item in request.environ["wsgi.input"]:
             for line in item.splitlines():
                 if line:
-                    q.publish(channel, line)
+                    q.publish(channel, line.decode())
         return jsonify({})
 
 

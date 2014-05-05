@@ -1,7 +1,10 @@
+# -*- coding: utf8 -*-
+
+from __future__ import unicode_literals
 import json
 import unittest
-import fakeredis
 import mock
+
 
 from flasque.main import app
 
@@ -9,13 +12,10 @@ from flasque.main import app
 class Test(unittest.TestCase):
 
     def setUp(self):
-        self.db = app._db = fakeredis.FakeRedis()
-        self.publish = app._db.publish = mock.Mock()
-        self.pubsub = app._db.pubsub = mock.Mock()
         self.app = app.test_client()
         self.get_uuid = mock.patch("flasque.queue.get_uuid")
         uuid = self.get_uuid.start()
-        uuid.side_effect = (str(x) for x in xrange(10))
+        uuid.side_effect = (str(x) for x in range(10))
 
     def tearDown(self):
         app._db.flushall()
@@ -23,6 +23,7 @@ class Test(unittest.TestCase):
 
     def assertSseEqual(self, response, expected):
         for i, data in enumerate(response):
+            data = data.decode()
             self.assertEqual(data[:6], "data: ")
             self.assertEqual(data[-2:], "\n\n")
             if data[6:-2]:
@@ -33,11 +34,13 @@ class Test(unittest.TestCase):
 
     def post(self, queue, data):
         res = self.app.post("/queue/" + queue, data=data)
-        return json.loads(res.data)["id"]
+        data = res.data.decode()
+        return json.loads(data)["id"]
 
     def delete(self, queue, msgid):
         res = self.app.delete("/queue/" + queue + "?id=" + msgid)
-        self.assertEqual(json.loads(res.data), {})
+        data = res.data.decode()
+        self.assertEqual(json.loads(data), {})
 
     def assertGetEqual(self, queue, expected, pending=False):
         if pending:
@@ -45,7 +48,8 @@ class Test(unittest.TestCase):
         else:
             res = self.app.get("/queue/" + queue)
         expected.setdefault("channel", queue)
-        self.assertEqual(json.loads(res.data[6:]), expected)
+        data = res.data.decode()
+        self.assertEqual(json.loads(data[6:]), expected)
 
     def test_get_delete(self):
         msgid = self.post("foo", "bar")
@@ -73,13 +77,21 @@ class Test(unittest.TestCase):
         })
 
     def test_wait_queue(self):
-        self.app.post("/queue/foo", data="bar")
-        self.db.blpop = mock.Mock(side_effect=[None, ("queue:foo", "0")])
-        res = self.app.get("/queue/foo")
-        self.assertSseEqual(res.response, [
-            None,
-            {"id": "0", "channel": "foo", "data": "bar"},
-        ])
+        message = {
+            "id": "0",
+            "channel": "foo",
+            "data": "bar",
+        }
+        with mock.patch("flasque.queue.Queue.get_message") as m:
+            m.side_effect = [
+                None,
+                message,
+            ]
+            res = self.app.get("/queue/foo")
+            self.assertSseEqual(res.response, [
+                None,
+                {"id": "0", "channel": "foo", "data": "bar"},
+            ])
 
     def test_wait_channel(self):
         message = {
@@ -97,11 +109,3 @@ class Test(unittest.TestCase):
                 None,
                 message,
             ])
-
-    def test_publish(self):
-        self.app.post("/channel/foo", data="bar")
-        self.publish.assert_called_with("channel:foo", json.dumps({
-            "id": None,
-            "channel": "foo",
-            "data": "bar"}
-        ))
