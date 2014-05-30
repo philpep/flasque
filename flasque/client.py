@@ -5,10 +5,26 @@ import time
 import Queue
 import requests
 import threading
+import logging
 
 
 class StopThreadException(Exception):
     pass
+
+
+class FlasqueHandler(logging.Handler):
+
+    def __init__(self, channel, api="http://localhost:5000"):
+        self.producer = ChannelProducer(api, channel)
+        self.producer.start()
+        logging.Handler.__init__(self)
+
+    def close(self):
+        self.producer.stop()
+        self.producer.join()
+
+    def emit(self, record):
+        self.producer.put(self.format(record))
 
 
 class Message(object):
