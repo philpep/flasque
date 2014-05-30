@@ -32,8 +32,11 @@ class Queue(object):
 
     def get_message(self, channels, pending=False, pubsub=False, timeout=1):
         if pubsub:
-            self.subscribe([
-                "channel:" + channel for channel in channels])
+            if channels:
+                self.subscribe([
+                    "channel:" + channel for channel in channels])
+            else:
+                self.psubscribe(["channel:*"])
             return self.get_message_pubsub(timeout=timeout)
         else:
             queues = []
@@ -85,11 +88,16 @@ class Queue(object):
             self._pubsub = db.pubsub()
             self._pubsub.subscribe(keys)
 
+    def psubscribe(self, keys):
+        if self._pubsub is None:
+            self._pubsub = db.pubsub()
+            self._pubsub.psubscribe(keys)
+
     def get_message_pubsub(self, timeout=1):
         sleep_time = 0
         while sleep_time < timeout:
             message = self._pubsub.get_message()
-            if message is not None and message["type"] == "message":
+            if message is not None and message["type"] in ("message", "pmessage"):
                 return message["data"]
             elif message is None:
                 time.sleep(0.1)

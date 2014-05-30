@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 
 import json
-from flask import request, Response, jsonify, render_template
+from flask import request, Response, jsonify, make_response
 from flask.views import MethodView
 from .queue import Queue
 
@@ -78,4 +78,4 @@ def stream_status():
 
 
 def index():
-    return render_template("index.html")
+    return make_response(open("flasque/static/flasque.html").read())

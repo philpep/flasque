@@ -1,0 +1,20 @@
+<div class="table-responsive">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Waiting</th>
+                <th>Pending</th>
+                <th>Done</th>
+            </tr>
+        </thead>
+        <tbody id="status-table">
+            <tr ng-repeat="(name, v) in queues">
+                <td>{{ name }}</td>
+                <td>{{ v.waiting }}</td>
+                <td>{{ v.pending }}</td>
+                <td>{{ v.done }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
