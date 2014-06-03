@@ -1,4 +1,9 @@
 var flasqueApp = angular.module("flasqueApp", ['ngRoute']);
+
+flasqueApp.run(function($rootScope){
+    $rootScope.sse = null;
+});
+
 flasqueApp.config(function($routeProvider) {
     $routeProvider
         .when("/", {
@@ -13,11 +18,15 @@ flasqueApp.config(function($routeProvider) {
         });
 });
 
-flasqueApp.controller('queueController', function($scope, $route) {
+flasqueApp.controller('queueController', function($scope, $rootScope, $route) {
     $scope.$route = $route;
     $scope.queues = {};
-    var sse = new EventSource("/status");
-    sse.onmessage = function(message){
+
+    if ($rootScope.sse)
+        $rootScope.sse.close();
+
+    $rootScope.sse = new EventSource("/status");
+    $rootScope.sse.onmessage = function(message){
         if (message.data){
             var data = angular.fromJson(message.data);
             for (e in data) {
@@ -32,11 +41,15 @@ flasqueApp.controller('queueController', function($scope, $route) {
     };
 });
 
-flasqueApp.controller('channelController', function($scope, $route) {
+flasqueApp.controller('channelController', function($scope, $rootScope, $route) {
     $scope.$route = $route;
     $scope.messages = [];
-    var sse = new EventSource("/channel/");
-    sse.onmessage = function(message){
+
+    if ($rootScope.sse)
+        $rootScope.sse.close();
+
+    $rootScope.sse = new EventSource("/channel/");
+    $rootScope.sse.onmessage = function(message){
         if (message.data){
             var msg = angular.fromJson(message.data);
             $scope.messages.push(msg);
