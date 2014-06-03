@@ -1,5 +1,6 @@
 # -*- coding: utf8 -*-
 
+from __future__ import unicode_literals
 
 from flask.ext.script import Manager
 from .urls import app

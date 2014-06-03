@@ -1,11 +1,20 @@
 # -*- coding: utf8 -*-
 
+from __future__ import unicode_literals
+
+import six
+
 from .views import QueueApi, ChannelApi, index, stream_status
 from flask import request
 from .app import app
 
-queue_view = QueueApi.as_view("queue")
-channel_view = ChannelApi.as_view("channel")
+# Workaround TypeError: __name__ must be set to a string object
+if six.PY3:
+    queue_view = QueueApi.as_view("queue")
+    channel_view = ChannelApi.as_view("channel")
+else:
+    queue_view = QueueApi.as_view(b"queue")
+    channel_view = ChannelApi.as_view(b"channel")
 
 app.add_url_rule(
     "/queue/",

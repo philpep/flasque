@@ -1,5 +1,7 @@
 # -*- coding: utf8 -*-
 
+from __future__ import unicode_literals
+
 import redis
 from flask import Flask
 from werkzeug.local import LocalProxy
