@@ -3,6 +3,8 @@
 from __future__ import unicode_literals
 
 import json
+import os
+
 from flask import request, Response, jsonify, make_response
 from flask.views import MethodView
 from .queue import Queue
@@ -80,4 +82,6 @@ def stream_status():
 
 
 def index():
-    return make_response(open("flasque/static/flasque.html").read())
+    filename = os.path.join(os.path.dirname(__file__), "static",
+                            "flasque.html")
+    return make_response(open(filename).read())
