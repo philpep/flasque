@@ -1,4 +1,4 @@
--e git+https://github.com/andymccurdy/redis-py@master#egg=redis
+redis>=2.10
 flask
 flask-script
 gevent
