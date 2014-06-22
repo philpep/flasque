@@ -4,7 +4,8 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 from flask.ext.script import Manager
-from .urls import app
+
+from flasque.urls import app
 
 
 manager = Manager(app)

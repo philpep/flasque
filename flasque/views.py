@@ -7,7 +7,8 @@ import os
 
 from flask import request, Response, jsonify, make_response
 from flask.views import MethodView
-from .queue import Queue
+
+from flasque.queue import Queue
 
 
 def sse_response(iterator, once=False, json_data=False):

@@ -4,8 +4,9 @@ from __future__ import unicode_literals
 
 import json
 import time
-from .app import db
-from .utils import get_uuid
+
+from flasque.app import db
+from flasque.utils import get_uuid
 
 
 class Queue(object):

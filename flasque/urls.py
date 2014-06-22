@@ -4,9 +4,10 @@ from __future__ import unicode_literals
 
 import six
 
-from .views import QueueApi, ChannelApi, index, stream_status
 from flask import request
-from .app import app
+
+from flasque.views import QueueApi, ChannelApi, index, stream_status
+from flasque.app import app
 
 # Workaround TypeError: __name__ must be set to a string object
 if six.PY3:
