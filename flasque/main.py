@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 
 from __future__ import unicode_literals
+from __future__ import print_function
 
 from flask.ext.script import Manager
 from .urls import app
@@ -15,7 +16,7 @@ def runserver(host="127.0.0.1", port="5000", debug=False):
     from gevent.wsgi import WSGIServer
     monkey.patch_all()
     app.debug = debug
-    print(" * Running on http://" + host + ":" + port + "/")
+    print(" * Running on http://%s:%s" % (host, port))
     WSGIServer((host, int(port)), app).serve_forever()
 
 
