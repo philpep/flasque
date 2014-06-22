@@ -77,13 +77,16 @@ class Queue(object):
 
     def delete_message(self, channel, msgid):
         prefix = "queue:" + channel
-        db.pipeline().\
+        pending, _ = db.pipeline().\
             lrem(prefix + ":pending", msgid).\
             delete(prefix + ":message:" + msgid).\
-            incr(prefix + ":total").\
-            decr(prefix + ":pending:count").\
-            publish("queues:status", channel).\
             execute()
+        if pending:
+            db.pipeline().\
+                incr(prefix + ":total").\
+                decr(prefix + ":pending:count").\
+                publish("queues:status", channel).\
+                execute()
 
     def subscribe(self, keys):
         if self._pubsub is None:
