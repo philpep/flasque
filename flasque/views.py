@@ -30,18 +30,20 @@ def sse_response(iterator, once=False, json_data=False):
 class BaseApi(MethodView):
 
     @staticmethod
-    def get_channels(channel=None):
-        if channel is None:
-            channels = request.args.getlist("channel")
-        else:
-            channels = [channel]
-        return channels
+    def get_channels():
+        # TODO: validation
+        return request.args.getlist("channel")
+
+    @staticmethod
+    def get_channel():
+        # TODO: validation
+        return request.args.get("channel")
 
 
 class QueueApi(BaseApi):
 
-    def get(self, channel):
-        channels = self.get_channels(channel)
+    def get(self):
+        channels = self.get_channels()
         if request.args.get("pending", "0") == "1":
             pending = True
         else:
@@ -50,26 +52,26 @@ class QueueApi(BaseApi):
             Queue().iter_messages(channels, pending=pending),
             once=True, json_data=True)
 
-    def post(self, channel):
+    def post(self):
         return jsonify({
-            "id": Queue().put(channel, request.data.decode()),
+            "id": Queue().put(self.get_channel(), request.data.decode()),
         })
 
-    def delete(self, channel):
+    def delete(self):
         msgid = request.args.get("id")
-        Queue().delete_message(channel, msgid)
+        Queue().delete_message(self.get_channel(), msgid)
         return jsonify({})
 
 
 class ChannelApi(BaseApi):
 
-    def get(self, channel):
+    def get(self):
         return sse_response(
-            Queue().iter_messages(self.get_channels(channel), pubsub=True))
+            Queue().iter_messages(self.get_channel(), pubsub=True))
 
     @staticmethod
-    def post(channel):
-        channel = ChannelApi.get_channels(channel)[0]
+    def post():
+        channel = ChannelApi.get_channel()
         q = Queue()
         for item in request.environ["wsgi.input"]:
             for line in item.splitlines():

@@ -33,20 +33,20 @@ class Test(unittest.TestCase):
             self.assertEqual(i < len(expected) + 1, True)
 
     def post(self, queue, data):
-        res = self.app.post("/queue/" + queue, data=data)
+        res = self.app.post("/queue/?channel=" + queue, data=data)
         data = res.data.decode()
         return json.loads(data)["id"]
 
     def delete(self, queue, msgid):
-        res = self.app.delete("/queue/" + queue + "?id=" + msgid)
+        res = self.app.delete("/queue/?channel=" + queue + "&id=" + msgid)
         data = res.data.decode()
         self.assertEqual(json.loads(data), {})
 
     def assertGetEqual(self, queue, expected, pending=False):
         if pending:
-            res = self.app.get("/queue/" + queue + "?pending=1")
+            res = self.app.get("/queue/?channel=" + queue + "&pending=1")
         else:
-            res = self.app.get("/queue/" + queue)
+            res = self.app.get("/queue/?channel=" + queue)
         expected.setdefault("channel", queue)
         data = res.data.decode()
         self.assertEqual(json.loads(data[6:]), expected)
@@ -87,7 +87,7 @@ class Test(unittest.TestCase):
                 None,
                 message,
             ]
-            res = self.app.get("/queue/foo")
+            res = self.app.get("/queue/?channel=foo")
             self.assertSseEqual(res.response, [
                 None,
                 {"id": "0", "channel": "foo", "data": "bar"},
@@ -104,7 +104,7 @@ class Test(unittest.TestCase):
                 None,
                 json.dumps(message),
             ]
-            res = self.app.get("/channel/foo")
+            res = self.app.get("/channel/?channel=foo")
             self.assertSseEqual(res.response, [
                 None,
                 message,

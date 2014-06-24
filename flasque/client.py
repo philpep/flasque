@@ -108,7 +108,8 @@ class Producer(ThreadQueue):
         else:
             self.make_request(
                 self.session.post,
-                self.api + "/queue/" + self.qname,
+                self.api + "/queue/",
+                params={"channel": self.qname},
                 data=data,
             )
         if self._stop.is_set():
@@ -139,8 +140,11 @@ class Consumer(ThreadQueue):
         self.q.join()
         self.make_request(
             self.session.delete,
-            self.api + "/queue/" + msg["channel"],
-            params={"id": msg["id"]},
+            self.api + "/queue/",
+            params={
+                "id": msg["id"],
+                "channel": msg["channel"],
+            },
         )
 
 
@@ -178,7 +182,8 @@ class ChannelProducer(ThreadQueue):
     def loop(self):
         self.make_request(
             self.session.post,
-            self.api + "/channel/" + self.qname,
+            self.api + "/channel/",
+            params={"channel": self.qname},
             data=self.generate(),
         )
 
