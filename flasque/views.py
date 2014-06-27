@@ -8,7 +8,7 @@ import os
 from flask import request, Response, jsonify, make_response
 from flask.views import MethodView
 
-from flasque.queue import Queue
+import flasque.queue
 
 
 def sse_response(iterator, once=False, json_data=False):
@@ -49,17 +49,17 @@ class QueueApi(BaseApi):
         else:
             pending = False
         return sse_response(
-            Queue().iter_messages(channels, pending=pending),
+            flasque.queue.iter_messages(channels, pending=pending),
             once=True, json_data=True)
 
     def post(self):
         return jsonify({
-            "id": Queue().put(self.get_channel(), request.data.decode()),
+            "id": flasque.queue.put(self.get_channel(), request.data.decode()),
         })
 
     def delete(self):
         msgid = request.args.get("id")
-        Queue().delete_message(self.get_channel(), msgid)
+        flasque.queue.delete_message(self.get_channel(), msgid)
         return jsonify({})
 
 
@@ -67,21 +67,24 @@ class ChannelApi(BaseApi):
 
     def get(self):
         return sse_response(
-            Queue().iter_messages(self.get_channel(), pubsub=True))
+            flasque.queue.iter_messages_pubsub(self.get_channel()))
 
     @staticmethod
     def post():
         channel = ChannelApi.get_channel()
-        q = Queue()
         for item in request.environ["wsgi.input"]:
             for line in item.splitlines():
                 if line:
-                    q.publish(channel, line.decode())
+                    flasque.queue.publish(channel, line.decode())
         return jsonify({})
 
 
+class LogsApi(ChannelApi):
+    pass
+
+
 def stream_status():
-    return sse_response(Queue().iter_status(), json_data=True)
+    return sse_response(flasque.queue.iter_status(), json_data=True)
 
 
 def index():

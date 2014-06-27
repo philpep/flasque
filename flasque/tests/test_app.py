@@ -82,7 +82,7 @@ class Test(unittest.TestCase):
             "channel": "foo",
             "data": "bar",
         }
-        with mock.patch("flasque.queue.Queue.get_message") as m:
+        with mock.patch("flasque.queue.get_message") as m:
             m.side_effect = [
                 None,
                 message,
@@ -91,21 +91,4 @@ class Test(unittest.TestCase):
             self.assertSseEqual(res.response, [
                 None,
                 {"id": "0", "channel": "foo", "data": "bar"},
-            ])
-
-    def test_wait_channel(self):
-        message = {
-            "id": "0",
-            "channel": "foo",
-            "data": "bar",
-        }
-        with mock.patch("flasque.queue.Queue.get_message_pubsub") as m:
-            m.side_effect = [
-                None,
-                json.dumps(message),
-            ]
-            res = self.app.get("/channel/?channel=foo")
-            self.assertSseEqual(res.response, [
-                None,
-                message,
             ])

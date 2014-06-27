@@ -9,148 +9,142 @@ from flasque.app import db
 from flasque.utils import get_uuid
 
 
-class Queue(object):
+def put(channel, data):
+    msgid = get_uuid()
+    prefix = "queue:" + channel
+    db.pipeline().\
+        sadd("queues", channel).\
+        sadd("channels", channel).\
+        set(prefix + ":message:" + msgid, data).\
+        rpush(prefix, msgid).\
+        publish("channel:" + channel, json.dumps({
+            "id": msgid,
+            "channel": channel,
+            "data": data,
+        })).\
+        incr(prefix + ":count").\
+        publish("queues:status", channel).\
+        execute()
+    return msgid
 
-    def __init__(self):
-        self._pubsub = None
-        super(Queue, self).__init__()
 
-    def put(self, channel, data):
-        msgid = get_uuid()
-        prefix = "queue:" + channel
+def get_message(channels, pending=False, timeout=1):
+    queues = []
+    for channel in channels:
+        if pending:
+            queues.extend([
+                "queue:" + channel + ":pending",
+                "queue:" + channel,
+            ])
+        else:
+            queues.append("queue:" + channel)
+
+    elm = db.blpop(queues, timeout=1)
+    if elm is not None:
+        queue, msgid = elm
+        channel = queue.split(":")[1]
+        pending = "queue:" + channel + ":pending"
+        pipe = db.pipeline().\
+            get("queue:" + channel + ":message:" + msgid).\
+            lpush(pending, msgid).\
+            publish("queues:status", channel)
+        if queue != pending:
+            pipe = pipe.\
+                decr(queue + ":count").\
+                incr(pending + ":count")
+        data = pipe.execute()[0]
+        return {
+            "id": msgid,
+            "channel": channel,
+            "data": data,
+        }
+
+
+def iter_messages(*args, **kwargs):
+    while True:
+        yield get_message(*args, **kwargs)
+
+
+def delete_message(channel, msgid):
+    prefix = "queue:" + channel
+    pending, _ = db.pipeline().\
+        lrem(prefix + ":pending", msgid).\
+        delete(prefix + ":message:" + msgid).\
+        execute()
+    if pending:
         db.pipeline().\
-            sadd("queues", channel).\
-            sadd("channels", channel).\
-            set(prefix + ":message:" + msgid, data).\
-            rpush(prefix, msgid).\
-            publish("channel:" + channel, json.dumps({
-                "id": msgid,
-                "channel": channel,
-                "data": data,
-            })).\
-            incr(prefix + ":count").\
+            incr(prefix + ":total").\
+            decr(prefix + ":pending:count").\
             publish("queues:status", channel).\
             execute()
-        return msgid
 
-    def get_message(self, channels, pending=False, pubsub=False, timeout=1):
-        if pubsub:
-            if channels:
-                self.subscribe([
-                    "channel:" + channel for channel in channels])
-            else:
-                self.psubscribe(["channel:*"])
-            return self.get_message_pubsub(timeout=timeout)
+
+def publish(channel, data):
+    db.pipeline().\
+        sadd("channels", channel).\
+        publish("channel:" + channel, json.dumps({
+            "id": None,
+            "channel": channel,
+            "data": data,
+        })).\
+        execute()
+
+
+def get_status(channel=None):
+    if channel is None:
+        channels = db.smembers("queues")
+    else:
+        channels = [channel]
+
+    if not channels:
+        # no queues
+        return []
+
+    keys = []
+    for channel in channels:
+        keys.extend([
+            "queue:" + channel + ":count",
+            "queue:" + channel + ":pending:count",
+            "queue:" + channel + ":total",
+        ])
+    values = db.mget(keys)
+    i = 0
+    status = []
+    for channel in channels:
+        status.append((
+            channel, values[i] or 0, values[i+1] or 0, values[i+2] or 0))
+        i += 3
+    return status
+
+
+def get_message_pubsub(pub, timeout=1):
+    sleep_time = 0
+    while sleep_time < timeout:
+        message = pub.get_message()
+        if message is not None and message["type"] in ("message", "pmessage"):
+            return message["data"]
+        elif message is None:
+            time.sleep(0.1)
+            sleep_time += 0.1
+
+
+def iter_messages_pubsub(channels, timeout=1):
+    pub = db.pubsub()
+    if channels:
+        pub.subscribe(["channel:" + channel for channel in channels])
+    else:
+        pub.psubscribe(["channel:*"])
+    while True:
+        yield get_message_pubsub(pub, timeout=timeout)
+
+
+def iter_status():
+    pub = db.pubsub()
+    pub.subscribe(["queues:status"])
+    yield get_status()
+    while True:
+        channel = get_message_pubsub(pub)
+        if channel is not None:
+            yield get_status(channel)
         else:
-            queues = []
-            for channel in channels:
-                if pending:
-                    queues.extend([
-                        "queue:" + channel + ":pending",
-                        "queue:" + channel,
-                    ])
-                else:
-                    queues.append("queue:" + channel)
-
-            elm = db.blpop(queues, timeout=1)
-            if elm is not None:
-                queue, msgid = elm
-                channel = queue.split(":")[1]
-                pending = "queue:" + channel + ":pending"
-                pipe = db.pipeline().\
-                    get("queue:" + channel + ":message:" + msgid).\
-                    lpush(pending, msgid).\
-                    publish("queues:status", channel)
-                if queue != pending:
-                    pipe = pipe.\
-                        decr(queue + ":count").\
-                        incr(pending + ":count")
-                data = pipe.execute()[0]
-                return {
-                    "id": msgid,
-                    "channel": channel,
-                    "data": data,
-                }
-
-    def iter_messages(self, *args, **kwargs):
-        while True:
-            yield self.get_message(*args, **kwargs)
-
-    def delete_message(self, channel, msgid):
-        prefix = "queue:" + channel
-        pending, _ = db.pipeline().\
-            lrem(prefix + ":pending", msgid).\
-            delete(prefix + ":message:" + msgid).\
-            execute()
-        if pending:
-            db.pipeline().\
-                incr(prefix + ":total").\
-                decr(prefix + ":pending:count").\
-                publish("queues:status", channel).\
-                execute()
-
-    def subscribe(self, keys):
-        if self._pubsub is None:
-            self._pubsub = db.pubsub()
-            self._pubsub.subscribe(keys)
-
-    def psubscribe(self, keys):
-        if self._pubsub is None:
-            self._pubsub = db.pubsub()
-            self._pubsub.psubscribe(keys)
-
-    def get_message_pubsub(self, timeout=1):
-        sleep_time = 0
-        while sleep_time < timeout:
-            message = self._pubsub.get_message()
-            if message is not None and message["type"] in ("message", "pmessage"):
-                return message["data"]
-            elif message is None:
-                time.sleep(0.1)
-                sleep_time += 0.1
-
-    def publish(self, channel, data):
-        db.pipeline().\
-            sadd("channels", channel).\
-            publish("channel:" + channel, json.dumps({
-                "id": None,
-                "channel": channel,
-                "data": data,
-            })).\
-            execute()
-
-    def get_status(self, channel=None):
-        if channel is None:
-            channels = db.smembers("queues")
-        else:
-            channels = [channel]
-
-        if not channels:
-            # no queues
-            return []
-
-        keys = []
-        for channel in channels:
-            keys.extend([
-                "queue:" + channel + ":count",
-                "queue:" + channel + ":pending:count",
-                "queue:" + channel + ":total",
-            ])
-        values = db.mget(keys)
-        i = 0
-        status = []
-        for channel in channels:
-            status.append((
-                channel, values[i] or 0, values[i+1] or 0, values[i+2] or 0))
-            i += 3
-        return status
-
-    def iter_status(self):
-        self.subscribe(["queues:status"])
-        yield self.get_status()
-        while True:
-            channel = self.get_message_pubsub()
-            if channel is not None:
-                yield self.get_status(channel)
-            else:
-                yield
+            yield
