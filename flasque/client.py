@@ -8,22 +8,38 @@ import Queue
 import requests
 import threading
 import logging
+import socket
 
 
 class StopThreadException(Exception):
     pass
 
 
+class FlasqueFormatter(logging.Formatter):
+    RECORD_ATTRS = (
+        "threadName", "name", "thread", "created",
+        "process", "processName", "relativeCreated",
+        "module", "funcName", "levelno", "msecs",
+        "pathname", "lineno", "filename", "levelname",
+    )
+
+    def __init__(self):
+        self.hostname = socket.gethostname()
+        super(FlasqueFormatter, self).__init__()
+
+    def format(self, record):
+        attrs = {k: getattr(record, k) for k in self.RECORD_ATTRS}
+        attrs["message"] = record.getMessage()
+        attrs["hostname"] = self.hostname
+        return json.dumps(attrs)
+
+
 class FlasqueHandler(logging.Handler):
 
-    def __init__(self, channel, api="http://localhost:5000"):
-        self.producer = ChannelProducer(api, channel)
-        self.producer.start()
+    def __init__(self, producer):
+        self.producer = producer
         logging.Handler.__init__(self)
-
-    def close(self):
-        self.producer.stop()
-        self.producer.join()
+        self.setFormatter(FlasqueFormatter())
 
     def emit(self, record):
         self.producer.put(self.format(record))
@@ -43,9 +59,9 @@ class Message(object):
 
 class ThreadQueue(threading.Thread):
 
-    def __init__(self, api, qname):
+    def __init__(self, url, qname):
         super(ThreadQueue, self).__init__()
-        self.api = api
+        self.url = url
         self.qname = qname
         self.q = Queue.Queue()
         self.daemon = True
@@ -108,7 +124,7 @@ class Producer(ThreadQueue):
         else:
             self.make_request(
                 self.session.post,
-                self.api + "/queue/",
+                self.url,
                 params={"channel": self.qname},
                 data=data,
             )
@@ -127,7 +143,7 @@ class Consumer(ThreadQueue):
     def loop(self):
         res = self.make_request(
             self.session.get,
-            self.api + "/queue/",
+            self.url,
             params=self.params,
             stream=True,
         )
@@ -140,7 +156,7 @@ class Consumer(ThreadQueue):
         self.q.join()
         self.make_request(
             self.session.delete,
-            self.api + "/queue/",
+            self.url,
             params={
                 "id": msg["id"],
                 "channel": msg["channel"],
@@ -153,7 +169,7 @@ class ChannelConsumer(ThreadQueue):
     def loop(self):
         res = self.make_request(
             self.session.get,
-            self.api + "/channel/",
+            self.url,
             params={"channel": self.qname},
             stream=True,
         )
@@ -182,7 +198,7 @@ class ChannelProducer(ThreadQueue):
     def loop(self):
         self.make_request(
             self.session.post,
-            self.api + "/channel/",
+            self.url,
             params={"channel": self.qname},
             data=self.generate(),
         )
@@ -201,16 +217,27 @@ class Connection(object):
         return thread
 
     def Producer(self, qname):
-        return self.register(Producer(self.api, qname))
+        return self.register(Producer(self.api + "/queue/", qname))
 
     def Consumer(self, qname, pending=False):
-        return self.register(Consumer(self.api, qname, pending=pending))
+        return self.register(Consumer(
+            self.api + "/queue/", qname, pending=pending))
 
     def ChannelConsumer(self, qname):
-        return self.register(ChannelConsumer(self.api, qname))
+        return self.register(ChannelConsumer(self.api + "/channel/", qname))
 
     def ChannelProducer(self, qname):
-        return self.register(ChannelProducer(self.api, qname))
+        return self.register(ChannelProducer(self.api + "/channel/", qname))
+
+    def LogConsumer(self, qname):
+        return self.register(ChannelConsumer(self.api + "/log/", qname))
+
+    def LogProcuder(self, qname):
+        return self.register(ChannelProducer(self.api + "/log/", qname))
+
+    def Handler(self, qname):
+        producer = self.LogProcuder(qname)
+        return FlasqueHandler(producer)
 
     def close(self):
         for thread in self.threads:

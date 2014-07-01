@@ -79,10 +79,10 @@ def delete_message(channel, msgid):
             execute()
 
 
-def publish(channel, data):
+def publish(channel, data, prefix="channel"):
     db.pipeline().\
-        sadd("channels", channel).\
-        publish("channel:" + channel, json.dumps({
+        sadd("%ss" % (prefix), channel).\
+        publish("%s:%s" % (prefix, channel), json.dumps({
             "id": None,
             "channel": channel,
             "data": data,
@@ -128,12 +128,12 @@ def get_message_pubsub(pub, timeout=1):
             sleep_time += 0.1
 
 
-def iter_messages_pubsub(channels, timeout=1):
+def iter_messages_pubsub(channels, prefix="channel", timeout=1):
     pub = db.pubsub()
     if channels:
-        pub.subscribe(["channel:" + channel for channel in channels])
+        pub.subscribe(["%s:%s" (prefix, channel) for channel in channels])
     else:
-        pub.psubscribe(["channel:*"])
+        pub.psubscribe(["%s:*" % (prefix)])
     while True:
         yield get_message_pubsub(pub, timeout=timeout)
 

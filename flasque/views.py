@@ -64,23 +64,26 @@ class QueueApi(BaseApi):
 
 
 class ChannelApi(BaseApi):
+    PREFIX = "channel"
 
     def get(self):
         return sse_response(
-            flasque.queue.iter_messages_pubsub(self.get_channel()))
+            flasque.queue.iter_messages_pubsub(
+                self.get_channel(), prefix=self.PREFIX))
 
     @staticmethod
-    def post():
+    def post(prefix):
         channel = ChannelApi.get_channel()
         for item in request.environ["wsgi.input"]:
             for line in item.splitlines():
                 if line:
-                    flasque.queue.publish(channel, line.decode())
+                    flasque.queue.publish(
+                        channel, line.decode(), prefix=prefix)
         return jsonify({})
 
 
 class LogsApi(ChannelApi):
-    pass
+    PREFIX = "log"
 
 
 def stream_status():

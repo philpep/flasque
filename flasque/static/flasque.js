@@ -15,6 +15,11 @@ flasqueApp.config(function($routeProvider) {
             templateUrl: "/static/channels.html",
             controller: "channelController",
             activetab: "channels",
+        })
+        .when("/logs", {
+            templateUrl: "/static/logs.html",
+            controller: "logController",
+            activetab: "logs",
         });
 });
 
@@ -52,6 +57,26 @@ flasqueApp.controller('channelController', function($scope, $rootScope, $route) 
     $rootScope.sse.onmessage = function(message){
         if (message.data){
             var msg = angular.fromJson(message.data);
+            $scope.messages.push(msg);
+            $scope.messages = $scope.messages.slice(-30)
+            $scope.$apply();
+        }
+    };
+});
+
+flasqueApp.controller('logController', function($scope, $rootScope, $route) {
+    $scope.$route = $route;
+    $scope.messages = [];
+
+    if ($rootScope.sse)
+        $rootScope.sse.close();
+
+    $rootScope.sse = new EventSource("/log/");
+    $rootScope.sse.onmessage = function(message){
+        if (message.data){
+            var msg = angular.fromJson(message.data);
+            msg["log"] = angular.fromJson(msg["data"]);
+            delete msg["data"];
             $scope.messages.push(msg);
             $scope.messages = $scope.messages.slice(-30)
             $scope.$apply();
